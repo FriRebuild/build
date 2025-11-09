@@ -183,9 +183,9 @@ jobs:
         
         mkdir build-${{ matrix.arch }}
         cd build-${{ matrix.arch }}
-        ../frida/configure --host=${{ matrix.arch }} -- -Dfrida-gum:devkits=gum,gumjs -Dfrida-gum:v8=disabled -Dfrida-gum:database=disabled -Dfrida-gum:tests=disabled -Dfrida-core:compiler_backend=enabled -Dfrida-core:devkits=core
+        ../frida/configure --prefix=./installdir --host=${{ matrix.arch }} -- -Dfrida-gum:devkits=gum,gumjs -Dfrida-gum:v8=disabled -Dfrida-gum:database=disabled -Dfrida-gum:tests=disabled -Dfrida-core:compiler_backend=enabled -Dfrida-core:devkits=core
         make
-        make install
+        sudo make install 
         cd ..
     
     - name: Split Repository Name
@@ -269,13 +269,9 @@ jobs:
         # with:
         #   go-version-file: ${{ env.FRIDA_COMPILER_MOD }}
         #   cache-dependency-path: ${{ env.FRIDA_COMPILER_MOD }}
-      - name: Install Qt
-        if: matrix.arch == 'x86_64'
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: '6.7.0'
-          cache: true
-          setup-python: false
+      - name: Roll toolchain
+        run: python releng\deps.py roll toolchain windows-${{ matrix.arch }}
+        if: matrix.arch == 'x86'
       - name: build frida for ${{ matrix.arch }}
         env:
           MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
