@@ -238,7 +238,7 @@ jobs:
 
     - uses: xmake-io/github-action-setup-xmake@v1
       with:
-        xmake-version: branch@master
+        xmake-version: 3.0.5
         actions-cache-folder: '.xmake-cache'
         actions-cache-key: 'ci'
         package-cache: true
@@ -306,8 +306,9 @@ jobs:
           
           ./configure --host=windows-${{ matrix.arch }} -- "-Dfrida-gum:devkits=gum,gumjs" "-Dfrida-gum:v8=disabled" "-Dfrida-gum:database=disabled" "-Dfrida-gum:tests=disabled" "-Dfrida-core:compiler_backend=enabled" "-Dfrida-core:devkits=core"
           ./make
-          ls -Recurse .\subprojects\frida-gum\
-          cp .\subprojects\frida-gum\gum\gumenumtypes.h .\subprojects\frida-gum\bindings\gumjs\devkit\gumenumtypes.h
+          ls -Recurse .\ | Where-Object { $_.Name -like "gumenumtypes.h" } | ForEach-Object {
+            Write-Host "Found gumenumtypes.h at $($_.FullName)"
+          }
       - name: Check release version
         id: checkReleaseVersion
         uses: actions/github-script@v3
