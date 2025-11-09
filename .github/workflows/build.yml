@@ -263,10 +263,6 @@ jobs:
         with:
           msystem: ${{ matrix.sys }}
           install: ${{ matrix.pkg }}
-      - name: Roll SDK
-        run: python releng\deps.py roll sdk windows-${{ matrix.arch }} --activate
-      - name: Grab frida-core
-        run: python tools/ensure-submodules.py frida-core
       - name: Install Go toolchain
         uses: actions/setup-go@v5
         # with:
@@ -288,6 +284,8 @@ jobs:
           
           git clone --recurse-submodules https://github.com/frida/frida
           cd frida
+          python releng\deps.py roll sdk windows-${{ matrix.arch }} --activate
+          python tools/ensure-submodules.py frida-core
           
           ./configure --host=windows-${{ matrix.arch }} -- -Dfrida-gum:devkits=gum,gumjs -Dfrida-gum:v8=disabled -Dfrida-gum:database=disabled -Dfrida-gum:tests=disabled -Dfrida-core:compiler_backend=enabled -Dfrida-core:devkits=core
           ./make
