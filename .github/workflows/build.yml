@@ -223,7 +223,6 @@ jobs:
       shell: bash
       run: |
         cd build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit
-        strip build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit/*.a
         zip -9 -r ./gumjs-${{ matrix.arch }}.zip . && cd -
 
     - name: Upload gumjs for ${{ matrix.arch }}
