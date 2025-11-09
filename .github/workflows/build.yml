@@ -101,7 +101,7 @@ jobs:
           prerelease: false
 
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.platform == 'windows' && (matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-latest') || 'ubuntu-22.04' }}
     needs: [check_version, create_release]
     strategy:
       matrix:
@@ -121,6 +121,21 @@ jobs:
           - platform: linux
             arch: linux-x86_64
             setup_ndk: false
+          - platform: windows
+            arch: x86
+            sys: MINGW32
+            pkg: 'mingw-w64-i686-gcc'
+            setup_ndk: false
+          - platform: windows
+            arch: x86_64
+            sys: MINGW64
+            pkg: 'mingw-w64-x86_64-gcc'
+            setup_ndk: false
+          - platform: windows
+            arch: arm64
+            sys: CLANGARM64
+            pkg: 'mingw-w64-clang-aarch64-clang'
+            setup_ndk: false
 
     steps:
     - uses: actions/checkout@v3
@@ -130,6 +145,7 @@ jobs:
         node-version: 18
 
     - name: Set up JDK 17
+      if: matrix.platform != 'windows'
       uses: actions/setup-java@v3
       with:
         distribution: "temurin"
@@ -145,11 +161,21 @@ jobs:
         link-to-sdk: true
 
     - name: Set up Python 3.9
+      if: matrix.platform != 'windows'
       uses: actions/setup-python@v4
       with:
         python-version: 3.9
 
+    - name: Install MinGW toolchain for Windows
+      if: matrix.platform == 'windows'
+      id: msys2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: ${{ matrix.sys }}
+        install: ${{ matrix.pkg }}
+
     - name: install dependencies
+      if: matrix.platform != 'windows'
       run: |
         sudo apt-get update && DEBIAN_FRONTEND=noninteractive sudo apt-get install build-essential tree ninja-build gcc-multilib g++-multilib lib32stdc++-9-dev flex bison ruby ruby-dev python3-requests python3-setuptools python3-dev python3-pip libc6-dev libc6-dev-i386 -y
         sudo gem install fpm -v 1.11.0 --no-document
@@ -162,38 +188,37 @@ jobs:
         echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}"
 
     - name: build frida for ${{ matrix.arch }}
-      shell: bash
+      shell: ${{ matrix.platform == 'windows' && 'pwsh' || 'bash' }}
       run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        ${{ matrix.platform == 'windows' && 'git config --global user.name "GitHub Actions"' || 'git config --global user.name "GitHub Actions"' }}
+        ${{ matrix.platform == 'windows' && 'git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"' || 'git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"' }}
         
         git clone --recurse-submodules https://github.com/frida/frida
         cd frida
-        for path in ../patches/*
-        do
-          name=$(basename $path)
-          real=$(realpath $path)
-          echo "Apply patches in $real to frida/subprojects/$name"
-          cd subprojects/$name
-          git am ../../../patches/$name/*.patch
-          cd ../..
-          echo $i
-        done
+        ${{ matrix.platform == 'windows' && '' || 'for path in ../patches/*' }}
+        ${{ matrix.platform == 'windows' && '' || 'do' }}
+        ${{ matrix.platform == 'windows' && '' || '  name=$(basename $path)' }}
+        ${{ matrix.platform == 'windows' && '' || '  real=$(realpath $path)' }}
+        ${{ matrix.platform == 'windows' && '' || '  echo "Apply patches in $real to frida/subprojects/$name"' }}
+        ${{ matrix.platform == 'windows' && '' || '  cd subprojects/$name' }}
+        ${{ matrix.platform == 'windows' && '' || '  git am ../../../patches/$name/*.patch' }}
+        ${{ matrix.platform == 'windows' && '' || '  cd ../..' }}
+        ${{ matrix.platform == 'windows' && '' || '  echo $i' }}
+        ${{ matrix.platform == 'windows' && '' || 'done' }}
         cd ..
         
         mkdir build-${{ matrix.arch }}
         cd build-${{ matrix.arch }}
-        ../frida/configure --host=${{ matrix.arch }} -- -Dfrida-gum:devkits=gum,gumjs -Dfrida-gum:v8=disabled -Dfrida-gum:database=disabled -Dfrida-gum:tests=disabled -Dfrida-core:compiler_backend=enabled -Dfrida-core:devkits=core
-        make
+        ${{ matrix.platform == 'windows' && '../frida/configure --prefix=$env:FRIDA_PREFIX --host=windows-${{ matrix.arch }} -- -Dfrida-gum:devkits=gum,gumjs -Dfrida-gum:v8=disabled -Dfrida-gum:database=disabled -Dfrida-gum:tests=disabled -Dfrida-core:compiler_backend=enabled -Dfrida-core:devkits=core' || '../frida/configure --host=${{ matrix.arch }} -- -Dfrida-gum:devkits=gum,gumjs -Dfrida-gum:v8=disabled -Dfrida-gum:database=disabled -Dfrida-gum:tests=disabled -Dfrida-core:compiler_backend=enabled -Dfrida-core:devkits=core' }}
+        ${{ matrix.platform == 'windows' && '../frida/make' || 'make' }}
         cd ..
+      env:
+        MSYS2_LOCATION: ${{ matrix.platform == 'windows' && steps.msys2.outputs.msys2-location || '' }}
     
     - name: Split Repository Name
       id: split_name
       run: |
-        repo_name=${{ github.repository }}
-        IFS='/' read -ra repo_parts <<< "$repo_name"
-        echo "owner=${repo_parts[0]}" >> $GITHUB_OUTPUT
-        echo "repo=${repo_parts[1]}" >> $GITHUB_OUTPUT
+        ${{ matrix.platform == 'windows' && '$repo_name = "${{ github.repository }}"; $repo_parts = $repo_name -split "/"; Write-Output "owner=$($repo_parts[0])" >> $env:GITHUB_OUTPUT; Write-Output "repo=$($repo_parts[1])" >> $env:GITHUB_OUTPUT' || 'repo_name=${{ github.repository }}; IFS="/" read -ra repo_parts <<< "$repo_name"; echo "owner=${repo_parts[0]}" >> $GITHUB_OUTPUT; echo "repo=${repo_parts[1]}" >> $GITHUB_OUTPUT' }}
 
     - name: Check release version
       id: checkReleaseVersion
@@ -220,10 +245,9 @@ jobs:
           }
 
     - name: Package and compress gumjs folder for ${{ matrix.arch }}
-      shell: bash
+      shell: ${{ matrix.platform == 'windows' && 'pwsh' || 'bash' }}
       run: |
-        cd build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit
-        zip -9 -r ./gumjs-${{ matrix.arch }}.zip . && cd -
+        ${{ matrix.platform == 'windows' && 'cd build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit; Compress-Archive -Path * -DestinationPath ./gumjs-${{ matrix.arch }}.zip -Force; cd ..\..\..\..' || 'cd build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit; zip -9 -r ./gumjs-${{ matrix.arch }}.zip . && cd -' }}
 
     - name: Upload gumjs for ${{ matrix.arch }}
       uses: actions/upload-release-asset@v1.0.2
