@@ -221,8 +221,10 @@ jobs:
 
     - name: Package and compress gumjs folder for ${{ matrix.arch }}
       shell: bash
-      run: |
-        cd build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit && zip -9 -r ./gumjs-${{ matrix.arch }}.zip . && cd -
+      run: >
+        cd build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit
+        strip build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit/*.a
+        zip -9 -r ./gumjs-${{ matrix.arch }}.zip . && cd -
 
     - name: Upload gumjs for ${{ matrix.arch }}
       uses: actions/upload-release-asset@v1.0.2
