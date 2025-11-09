@@ -1,4 +1,4 @@
-name: Florida
+name: fripack-inject
 
 on:
   schedule:
@@ -238,11 +238,7 @@ jobs:
 
     - uses: xmake-io/github-action-setup-xmake@v1
       with:
-        xmake-version: 3.0.4
-        actions-cache-folder: '.xmake-cache'
-        actions-cache-key: 'ci'
-        package-cache: true
-        package-cache-key: linux-${{ matrix.arch }}-${{ matrix.platform }}
+        xmake-version: 3.0.3
 
     - name: Build xmake fripack-inject for ${{ matrix.arch }}
       run: |
@@ -309,6 +305,7 @@ jobs:
           ls -Recurse .\ | Where-Object { $_.Name -like "gumenumtypes.h" } | ForEach-Object {
             Write-Host "Found gumenumtypes.h at $($_.FullName)"
           }
+          copy .\build\subprojects\frida-gum\gum\gumenumtypes.h .\build\subprojects\frida-gum\bindings\gumjs\devkit
       - name: Check release version
         id: checkReleaseVersion
         uses: actions/github-script@v3
@@ -335,7 +332,7 @@ jobs:
             }
       - name: Package and compress gumjs-devkit folder for ${{ matrix.arch }}
         run: |
-          Compress-Archive -Path .\frida\subprojects\frida-gum\bindings\gumjs\devkit\* -DestinationPath .\subprojects\frida-gum\bindings\gumjs\devkit\gumjs-devkit-${{ matrix.arch }}.zip -CompressionLevel Optimal
+          Compress-Archive -Path .\frida\build\subprojects\frida-gum\bindings\gumjs\devkit\* -DestinationPath .\subprojects\frida-gum\bindings\gumjs\devkit\gumjs-devkit-${{ matrix.arch }}.zip -CompressionLevel Optimal
           
       - name: Create Release Asset
         uses: actions/upload-release-asset@v1.0.2
