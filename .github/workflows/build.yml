@@ -239,8 +239,8 @@ jobs:
     needs: [check_version, create_release]
     strategy:
       matrix:
-        arch: [x86, x86_64, arm64]
-        config: [md, mdd, mt, mtd]
+        arch: [x86, x86_64]
+        config: [md, mt]
       fail-fast: false
     runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
     steps:
