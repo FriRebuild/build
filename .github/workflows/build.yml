@@ -155,14 +155,17 @@ jobs:
         sudo gem install fpm -v 1.11.0 --no-document
         python3 -m pip install lief graphlib
 
+    - name: Set Android NDK environment
+      if: matrix.setup_ndk
+      run: |
+        echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+        echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}"
+
     - name: build frida for ${{ matrix.arch }}
       shell: bash
       run: |
         git config --global user.name "GitHub Actions"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        
-        ${{ matrix.setup_ndk && 'export ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}' || '' }}
-        ${{ matrix.setup_ndk && 'echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"' || '' }}
         
         git clone --recurse-submodules https://github.com/frida/frida
         cd frida
