@@ -23,7 +23,7 @@ namespace logger {
 
 #ifdef __ANDROID__
 void log(const char *tag, const std::string &message) {
-  __android_log_write(ANDROID_LOG_DEBUG, tag, message.c_str());
+  __android_log_write(ANDROID_LOG_INFO, tag, message.c_str());
 }
 #else
 void log(const char *tag, const std::string &message) {
@@ -33,9 +33,8 @@ void log(const char *tag, const std::string &message) {
                 now.time_since_epoch()) %
             1000;
 
-  std::string formatted =
-      fmt::format("[{:%Y-%m-%d %H:%M:%S}.{:03d}] [{}] {}",
-                  now, ms.count(), tag, message);
+  std::string formatted = fmt::format("[{:%Y-%m-%d %H:%M:%S}.{:03d}] [{}] {}",
+                                      now, ms.count(), tag, message);
 
   fmt::println("{}", formatted);
 
@@ -134,11 +133,9 @@ public:
                  promise = std::move(init_promise)]() mutable {
       gum_init_embedded();
       backend_ = gum_script_backend_obtain_qjs();
-
       script_ =
           gum_script_backend_create_sync(backend_, "example", js_content.data(),
                                          nullptr, cancellable_, &error_);
-
       if (error_) {
         throw std::runtime_error(
             fmt::format("Failed to create script: {}", error_->message));
@@ -152,12 +149,11 @@ public:
         g_main_context_iteration(context_, FALSE);
       }
 
-      logger::println("[*] GumJS script loaded successfully");
-
+      promise.set_value();
       loop_ = g_main_loop_new(g_main_context_get_thread_default(), FALSE);
       g_main_loop_run(loop_);
     }).detach();
-    init_future.get();
+    // init_future.get();
     return init_promise;
   }
 
