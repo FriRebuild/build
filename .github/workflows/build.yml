@@ -223,8 +223,8 @@ jobs:
     - name: Package and compress gumjs folder for ${{ matrix.arch }}
       shell: bash
       run: |
+        cp build-${{ matrix.arch }}/subprojects/frida-gum/gum/gumenumtypes.h build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit/gumenumtypes.h
         cd build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit
-        cp ../../../../gum/gumenumtypes.h ./gumenumtypes.h
         zip -9 -r ./gumjs-${{ matrix.arch }}.zip . && cd -
 
     - name: Upload gumjs for ${{ matrix.arch }}
