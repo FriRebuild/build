@@ -1,223 +1,227 @@
-#include <string>
-#include <string_view>
-#include <memory>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
 #include <chrono>
+#include <condition_variable>
 #include <fstream>
-#include <iostream>
+#include <future>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
 
 #ifdef __ANDROID__
 #include <android/log.h>
 #include <jni.h>
-#endif
-
-#ifdef _WIN32
+#elif defined(_WIN32)
 #include <windows.h>
-#include <debugapi.h>
 #endif
 
 #include "frida-gumjs.h"
+#include <fmt/chrono.h>
+#include <fmt/format.h>
+
+namespace logger {
+
+#ifdef __ANDROID__
+void log(const char *tag, const std::string &message) {
+  __android_log_write(ANDROID_LOG_DEBUG, tag, message.c_str());
+}
+#else
+void log(const char *tag, const std::string &message) {
+  auto now = std::chrono::system_clock::now();
+  auto time_t = std::chrono::system_clock::to_time_t(now);
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch()) %
+            1000;
+
+  std::string formatted =
+      fmt::format("[{:%Y-%m-%d %H:%M:%S}.{:03d}] [{}] {}",
+                  now, ms.count(), tag, message);
+
+  fmt::println("{}", formatted);
+
+#ifdef _WIN32
+  OutputDebugStringA(formatted.c_str());
+  OutputDebugStringA("\n");
+#endif
+}
+#endif
+
+template <typename... Args>
+void println(fmt::format_string<Args...> format, Args &&...args) {
+  std::string message = fmt::format(format, std::forward<Args>(args)...);
+  log("FriPackInject", message);
+}
+} // namespace logger
 
 class GumJSHookManager {
 private:
-    std::mutex mtx_;
-    std::condition_variable cond_;
-    bool script_loaded_ = false;
-    
-    GumScriptBackend* backend_ = nullptr;
-    GCancellable* cancellable_ = nullptr;
-    GError* error_ = nullptr;
-    GumScript* script_ = nullptr;
-    GMainContext* context_ = nullptr;
-    GMainLoop* loop_ = nullptr;
-    std::thread gum_thread_;
+  std::unique_ptr<std::thread> hook_thread_;
+
+  GumScriptBackend *backend_ = nullptr;
+  GCancellable *cancellable_ = nullptr;
+  GError *error_ = nullptr;
+  GumScript *script_ = nullptr;
+  GMainContext *context_ = nullptr;
+  GMainLoop *loop_ = nullptr;
+  bool initialized_ = false;
 
 public:
-    GumJSHookManager() = default;
-    ~GumJSHookManager() {
-        cleanup();
-    }
+  GumJSHookManager() = default;
+  ~GumJSHookManager() { cleanup(); }
 
-    // 删除拷贝构造和赋值
-    GumJSHookManager(const GumJSHookManager&) = delete;
-    GumJSHookManager& operator=(const GumJSHookManager&) = delete;
+  GumJSHookManager(const GumJSHookManager &) = delete;
+  GumJSHookManager &operator=(const GumJSHookManager &) = delete;
 
-    int hook(const std::string& script_path);
-    void cleanup();
-
-private:
-    int hook_func(const std::string& script_path);
-    static void on_message(const gchar* message, GBytes* data, gpointer user_data);
-    static std::string read_file(const std::string& file_path);
-};
-
-// 跨平台日志函数
-template<typename... Args>
-void gumjs_log(std::string_view tag, std::format_string<Args...> fmt, Args&&... args) {
-    std::string message = std::format(fmt, std::forward<Args>(args)...);
-    std::string formatted_message = std::format("[{}] {}", tag, message);
-    
-#ifdef __ANDROID__
-    __android_log_print(ANDROID_LOG_DEBUG, tag.data(), "%s", message.c_str());
-#else
-    // 获取当前时间
-    auto now = std::chrono::system_clock::now();
-    auto time_t = std::chrono::system_clock::to_time_t(now);
-    auto tm = *std::localtime(&time_t);
-    
-    // 格式化时间字符串
-    char time_buf[64];
-    std::strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", &tm);
-    
-    // 输出到stdout
-    std::cout << "[" << time_buf << "] " << formatted_message << std::endl;
-    
-#ifdef _WIN32
-    // Windows下同时输出到调试器
-    OutputDebugStringA(formatted_message.c_str());
-    OutputDebugStringA("\n");
-#endif
-#endif
-}
-
-// 简化版本的日志函数（类似std::println签名）
-template<typename... Args>
-void gumjs_println(std::format_string<Args...> fmt, Args&&... args) {
-    gumjs_log("FGum", fmt, std::forward<Args>(args)...);
-}
-
-std::string GumJSHookManager::read_file(const std::string& file_path) {
-    std::ifstream file(file_path, std::ios::binary | std::ios::ate);
+  std::vector<char> read_file(const std::string &filepath) {
+    std::ifstream file(filepath, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
-        gumjs_println("File open failed: {}", file_path);
-        return "";
+      logger::println("File open failed: {}", filepath);
+      return {};
     }
 
     std::streamsize size = file.tellg();
     file.seekg(0, std::ios::beg);
 
-    std::string content(size, '\0');
-    if (!file.read(content.data(), size)) {
-        gumjs_println("File read failed: {}", file_path);
-        return "";
+    std::vector<char> buffer(size);
+    if (!file.read(buffer.data(), size)) {
+      logger::println("File read failed: {}", filepath);
+      return {};
     }
 
-    return content;
-}
+    return buffer;
+  }
 
-void GumJSHookManager::on_message(const gchar* message, GBytes* data, gpointer user_data) {
-    JsonParser* parser;
-    JsonObject* root;
-    const gchar* type;
+  static void on_message(const gchar *message, GBytes *data,
+                         gpointer user_data) {
+    JsonParser *parser = json_parser_new();
+    if (!json_parser_load_from_data(parser, message, -1, nullptr)) {
+      logger::println("Failed to parse JSON message");
+      g_object_unref(parser);
+      return;
+    }
 
-    parser = json_parser_new();
-    json_parser_load_from_data(parser, message, -1, nullptr);
-    root = json_node_get_object(json_parser_get_root(parser));
+    JsonNode *root_node = json_parser_get_root(parser);
+    if (!root_node) {
+      g_object_unref(parser);
+      return;
+    }
 
-    type = json_object_get_string_member(root, "type");
-    if (strcmp(type, "log") == 0) {
-        const gchar* log_message = json_object_get_string_member(root, "payload");
-        gumjs_println("Log: {}", log_message);
+    JsonObject *root = json_node_get_object(root_node);
+    if (!root) {
+      g_object_unref(parser);
+      return;
+    }
+
+    const gchar *type = json_object_get_string_member(root, "type");
+    if (type && strcmp(type, "log") == 0) {
+      const gchar *log_message = json_object_get_string_member(root, "payload");
+      if (log_message) {
+        logger::println("[*] log: {}", log_message);
+      }
     } else {
-        gumjs_println("Message: {}", message);
+      logger::println("[*] {}", message);
     }
 
     g_object_unref(parser);
-}
+  }
 
-int GumJSHookManager::hook_func(const std::string& script_path) {
-    gumjs_println("Starting GumJS hook...");
-    
-    gum_init_embedded();
-    backend_ = gum_script_backend_obtain_qjs();
-    
-    std::string js_code = read_file(script_path);
-    if (js_code.empty()) {
-        return 1;
-    }
+  std::promise<void> start_js_thread(const std::string &js_content) {
+    logger::println("[*] Starting GumJS hook thread");
 
-    script_ = gum_script_backend_create_sync(backend_, "example", js_code.c_str(), 
-                                            nullptr, cancellable_, &error_);
-    
-    if (error_ != nullptr) {
-        gumjs_println("Script creation failed: {}", error_->message);
-        return 1;
-    }
+    std::promise<void> init_promise;
+    std::future<void> init_future = init_promise.get_future();
+    std::thread([this, js_content = std::move(js_content),
+                 promise = std::move(init_promise)]() mutable {
+      gum_init_embedded();
+      backend_ = gum_script_backend_obtain_qjs();
 
-    gum_script_set_message_handler(script_, on_message, nullptr, nullptr);
-    gum_script_load_sync(script_, cancellable_);
+      script_ =
+          gum_script_backend_create_sync(backend_, "example", js_content.data(),
+                                         nullptr, cancellable_, &error_);
 
-    // 处理已有的事件
-    context_ = g_main_context_get_thread_default();
-    while (g_main_context_pending(context_)) {
+      if (error_) {
+        throw std::runtime_error(
+            fmt::format("Failed to create script: {}", error_->message));
+      }
+
+      gum_script_set_message_handler(script_, on_message, nullptr, nullptr);
+      gum_script_load_sync(script_, cancellable_);
+
+      context_ = g_main_context_get_thread_default();
+      while (g_main_context_pending(context_)) {
         g_main_context_iteration(context_, FALSE);
-    }
+      }
 
-    // 通知主线程脚本已加载完成
-    {
-        std::lock_guard<std::mutex> lock(mtx_);
-        script_loaded_ = true;
-        cond_.notify_one();
-    }
+      logger::println("[*] GumJS script loaded successfully");
 
-    gumjs_println("Script loaded successfully, starting event loop...");
-    loop_ = g_main_loop_new(g_main_context_get_thread_default(), FALSE);
-    g_main_loop_run(loop_); // 阻塞在这里
+      loop_ = g_main_loop_new(g_main_context_get_thread_default(), FALSE);
+      g_main_loop_run(loop_);
+    }).detach();
+    init_future.get();
+    return init_promise;
+  }
 
-    return 0;
-}
-
-int GumJSHookManager::hook(const std::string& script_path) {
-    gumjs_println("Initializing GumJS hook for: {}", script_path);
-    
-    // 在单独的线程中运行GumJS
-    gum_thread_ = std::thread([this, script_path]() {
-        this->hook_func(script_path);
-    });
-
-    // 等待脚本加载完成或超时
-    {
-        std::unique_lock<std::mutex> lock(mtx_);
-        auto timeout = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-        
-        if (cond_.wait_until(lock, timeout, [this]() { return script_loaded_; })) {
-            gumjs_println("GumJS hook initialized successfully");
-        } else {
-            gumjs_println("GumJS hook initialization timeout");
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-void GumJSHookManager::cleanup() {
-    gumjs_println("Cleaning up GumJS hook...");
-    
+  void stop() {
     if (loop_) {
-        g_main_loop_quit(loop_);
+      g_main_loop_quit(loop_);
     }
-    
-    if (gum_thread_.joinable()) {
-        gum_thread_.join();
+
+    if (hook_thread_ && hook_thread_->joinable()) {
+      hook_thread_->join();
     }
-    
+  }
+
+private:
+  void cleanup() {
+    stop();
+
     if (script_) {
-        g_object_unref(script_);
-        script_ = nullptr;
+      g_object_unref(script_);
+      script_ = nullptr;
     }
-    
+
     if (cancellable_) {
-        g_object_unref(cancellable_);
-        cancellable_ = nullptr;
+      g_object_unref(cancellable_);
+      cancellable_ = nullptr;
     }
-    
+
     if (loop_) {
-        g_main_loop_unref(loop_);
-        loop_ = nullptr;
+      g_main_loop_unref(loop_);
+      loop_ = nullptr;
     }
-    
-    gumjs_println("GumJS hook cleanup completed");
+
+    if (error_) {
+      g_error_free(error_);
+      error_ = nullptr;
+    }
+  }
+};
+
+static std::unique_ptr<GumJSHookManager> gumjs_hook_manager;
+
+void _main() {
+  logger::println("[*] Library loaded, starting GumJS hook");
+
+  gumjs_hook_manager = std::make_unique<GumJSHookManager>();
+
+  gumjs_hook_manager->start_js_thread("console.log('Hello from GumJS!');");
 }
+
+#ifdef _WIN32
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
+  switch (fdwReason) {
+  case DLL_PROCESS_ATTACH:
+    _main();
+    break;
+  case DLL_PROCESS_DETACH:
+    if (gumjs_hook_manager) {
+      gumjs_hook_manager->stop();
+      gumjs_hook_manager.reset();
+    }
+    break;
+  }
+  return TRUE;
+}
+#else
+__attribute__((constructor)) static void _library_main() { _main(); }
+#endif
