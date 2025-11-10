@@ -243,9 +243,9 @@ jobs:
 
     - name: Build xmake fripack-inject for ${{ matrix.arch }}
       run: |
-        mkdir .\fripack-inject\frida-gumjs-devkit\
-        copy ./build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit/* .\fripack-inject\frida-gumjs-devkit\
-        cd .\fripack-inject
+        mkdir -p ./fripack-inject/frida-gumjs-devkit/
+        copy ./build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit/* ./fripack-inject/frida-gumjs-devkit/
+        cd ./fripack-inject
         xmake f -a ${{ matrix.arch }} -y
         xmake -vD
         cp ./build/*/*/*/*.so ./
@@ -306,7 +306,7 @@ jobs:
           ls -Recurse .\ | Where-Object { $_.Name -like "gumenumtypes.h" } | ForEach-Object {
             Write-Host "Found gumenumtypes.h at $($_.FullName)"
           }
-          ls -Recurse .\
+          
           copy .\build\subprojects\frida-gum\gum\gumenumtypes.h .\build\subprojects\frida-gum\bindings\gumjs\devkit
       - name: Check release version
         id: checkReleaseVersion
@@ -334,7 +334,7 @@ jobs:
             }
       - name: Package and compress gumjs-devkit folder for ${{ matrix.arch }}
         run: |
-          Compress-Archive -Path .\frida\build\subprojects\frida-gum\bindings\gumjs\devkit\ -DestinationPath .\subprojects\frida-gum\bindings\gumjs\devkit\gumjs-devkit-${{ matrix.arch }}.zip -CompressionLevel Optimal
+          Compress-Archive -Path .\frida\build\subprojects\frida-gum\bindings\gumjs\devkit\ -DestinationPath .\devkit.zip -CompressionLevel Optimal
           
       - name: Create Release Asset
         uses: actions/upload-release-asset@v1.0.2
@@ -342,7 +342,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: '${{ steps.checkReleaseVersion.outputs.upload_url }}'
-          asset_path: './frida/subprojects/frida-gum/bindings/gumjs/devkit/gumjs-devkit-${{ matrix.arch }}.zip'
+          asset_path: './devkit.zip'
           asset_name: 'gumjs-devkit-${{ steps.checkReleaseVersion.outputs.version }}-windows-${{ matrix.arch }}.zip'
           asset_content_type: application/zip
 
@@ -353,8 +353,8 @@ jobs:
 
       - name: Build xmake fripack-inject for ${{ matrix.arch }}
         run: |
-          mkdir .\fripack-inject\frida-gumjs-devkit\
-          copy .\frida\subprojects\frida-gum\bindings\gumjs\devkit\* .\fripack-inject\frida-gumjs-devkit\
+          mkdir ./fripack-inject/frida-gumjs-devkit/
+          copy .\frida\build\subprojects\frida-gum\bindings\gumjs\devkit\* .\fripack-inject\frida-gumjs-devkit\
           cd .\fripack-inject
           xmake f -a ${{ matrix.arch }} -y
           xmake -vD
