@@ -246,7 +246,12 @@ jobs:
         mkdir -p ./fripack-inject/frida-gumjs-devkit/
         cp ./build-${{ matrix.arch }}/subprojects/frida-gum/bindings/gumjs/devkit/* ./fripack-inject/frida-gumjs-devkit/
         cd ./fripack-inject
-        xmake f -a ${{ matrix.arch }} -y
+        use_ndk="${{ matrix.setup_ndk }}"
+        if [ "$use_ndk" = "true" ]; then
+          xmake f -a ${{ matrix.arch }} -y -p android -v
+        else
+          xmake f -a ${{ matrix.arch }} -y -p linux -v
+        fi
         xmake -vD
         cp ./build/*/*/*/*.so ./
     - name: Upload fripack-inject for ${{ matrix.arch }}
@@ -354,9 +359,9 @@ jobs:
       - name: Build xmake fripack-inject for ${{ matrix.arch }}
         run: |
           mkdir ./fripack-inject/frida-gumjs-devkit/
-          copy .\frida\build\subprojects\frida-gum\bindings\gumjs\devkit\* .\fripack-inject\frida-gumjs-devkit\
-          cd .\fripack-inject
-          xmake f -a ${{ matrix.arch }} -y
+          cp ./frida/build/subprojects/frida-gum/bindings/gumjs/devkit/* ./fripack-inject/frida-gumjs-devkit/
+          cd ./fripack-inject
+          xmake f -a ${{ matrix.arch }} -y -v
           xmake -vD
       
       - name: Upload fripack-inject for ${{ matrix.arch }}
