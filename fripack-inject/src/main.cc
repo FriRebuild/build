@@ -245,7 +245,37 @@ void _main() {
   file.seekg(g_embedded_config.data_offset, std::ios::beg);
   std::vector<char> data(g_embedded_config.data_size);
   file.read(data.data(), g_embedded_config.data_size);
-  auto json_str = std::string(data.data(), g_embedded_config.data_size);
+
+  if (g_embedded_config.data_xz) {
+    std::vector<char> decompressed_buffer(10 * g_embedded_config.data_size);
+    size_t decompressed_size = decompressed_buffer.size();
+
+    lzma_stream strm = LZMA_STREAM_INIT;
+    if (lzma_stream_decoder(&strm, UINT64_MAX, 0) != LZMA_OK) {
+      logger::println("Failed to initialize LZMA decoder");
+      return;
+    }
+
+    strm.next_in = reinterpret_cast<uint8_t *>(data.data());
+    strm.avail_in = data.size();
+    strm.next_out = reinterpret_cast<uint8_t *>(decompressed_buffer.data());
+    strm.avail_out = decompressed_buffer.size();
+
+    lzma_ret ret = lzma_code(&strm, LZMA_FINISH);
+    if (ret != LZMA_STREAM_END) {
+      logger::println("LZMA decompression failed: {}", rfl::enum_to_string(ret));
+      lzma_end(&strm);
+      return;
+    }
+
+    decompressed_size = decompressed_buffer.size() - strm.avail_out;
+    lzma_end(&strm);
+
+    data.resize(decompressed_size);
+    std::memcpy(data.data(), decompressed_buffer.data(), decompressed_size);
+  }
+
+  auto json_str = std::string(data.data(), data.size());
   logger::println("Embedded config offset: {}, size: {}, JSON: {}",
                   g_embedded_config.data_offset, g_embedded_config.data_size,
                   json_str);
