@@ -211,7 +211,7 @@ struct EmbeddedConfig {
   int32_t data_offset = 0; // Offset from the start of this struct to data.
   bool data_xz = false;    // Whether the data is compressed with xz.
 };
-#pragma pack(pop)
+#pragma pack(pop) 
 
 struct EmbeddedConfigData {
   enum class Mode : int32_t {
@@ -233,7 +233,7 @@ void _main() {
     return;
   }
 
-  if (auto res = rfl::json::load<EmbeddedConfigData>(
+  if (auto res = rfl::json::read<EmbeddedConfigData>(
           std::string(reinterpret_cast<const char *>(&g_embedded_config) +
                           g_embedded_config.data_offset,
                       g_embedded_config.data_size))) {
@@ -244,6 +244,7 @@ void _main() {
     if (config.type == EmbeddedConfigData::Mode::EmbeddedJs) {
       if (config.js_content) {
         js_content = *config.js_content;
+        gumjs_hook_manager->start_js_thread(js_content);
       } else {
         logger::println("No JS content or filepath provided");
         return;
