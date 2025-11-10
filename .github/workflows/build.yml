@@ -372,8 +372,8 @@ jobs:
           mkdir ./fripack-inject/frida-gumjs-devkit/
           cp ./frida/build/subprojects/frida-gum/bindings/gumjs/devkit/* ./fripack-inject/frida-gumjs-devkit/
           cd ./fripack-inject
-          xmake f -a ${{ matrix.xmake_arch }} -y -v --toolchain=clang-cl --plat=windows
-          xmake -vD -y
+          xmake f --plat=windows -a ${{ matrix.xmake_arch }} -y -v --toolchain=clang-cl
+          xmake b -vD -y
       
       - name: Upload fripack-inject for ${{ matrix.arch }}
         uses: actions/upload-release-asset@v1.0.2

@@ -254,7 +254,7 @@ void _main() {
       return;
     }
   } else {
-    logger::println("Failed to parse embedded config data: {}", res.error());
+    logger::println("Failed to parse embedded config data: {}", res.error().what());
     return;
   }
 }
