@@ -247,38 +247,59 @@ void _main() {
   file.read(data.data(), g_embedded_config.data_size);
 
   if (g_embedded_config.data_xz) {
-    std::vector<char> decompressed_buffer(10 * g_embedded_config.data_size);
-    size_t decompressed_size = decompressed_buffer.size();
-
     lzma_stream strm = LZMA_STREAM_INIT;
-    if (lzma_stream_decoder(&strm, UINT64_MAX, 0) != LZMA_OK) {
-      logger::println("Failed to initialize LZMA decoder");
-      return;
-    }
 
-    strm.next_in = reinterpret_cast<uint8_t *>(data.data());
-    strm.avail_in = data.size();
-    strm.next_out = reinterpret_cast<uint8_t *>(decompressed_buffer.data());
-    strm.avail_out = decompressed_buffer.size();
-
-    lzma_ret ret = lzma_code(&strm, LZMA_FINISH);
-    if (ret != LZMA_STREAM_END) {
-      logger::println("LZMA decompression failed: {}", rfl::enum_to_string(ret));
+    lzma_ret ret = lzma_stream_decoder(&strm, UINT64_MAX, LZMA_CONCATENATED);
+    if (ret != LZMA_OK) {
+      logger::println("Failed to initialize LZMA decoder: {}",
+                      rfl::enum_to_string(ret));
       lzma_end(&strm);
       return;
     }
 
-    decompressed_size = decompressed_buffer.size() - strm.avail_out;
-    lzma_end(&strm);
+    strm.next_in = reinterpret_cast<const uint8_t *>(data.data());
+    strm.avail_in = data.size();
 
-    data.resize(decompressed_size);
-    std::memcpy(data.data(), decompressed_buffer.data(), decompressed_size);
+    std::vector<char> decompressed_data{};
+    constexpr size_t chunk_size = 64 * 1024;
+    constexpr size_t max_size = 300 * 1024 * 1024;
+
+    while (true) {
+      std::vector<char> chunk(chunk_size);
+      strm.next_out = reinterpret_cast<uint8_t *>(chunk.data());
+      strm.avail_out = chunk.size();
+
+      ret = lzma_code(&strm, LZMA_FINISH);
+
+      size_t decompressed_chunk_size = chunk.size() - strm.avail_out;
+      if (decompressed_data.size() + decompressed_chunk_size > max_size) {
+        logger::println("Decompressed data too large (> {} MB)",
+                        max_size / (1024 * 1024));
+        lzma_end(&strm);
+        return;
+      }
+
+      decompressed_data.insert(decompressed_data.end(), chunk.begin(),
+                               chunk.begin() + decompressed_chunk_size);
+
+      if (ret == LZMA_STREAM_END || strm.avail_in == 0) {
+        break;
+      } else if (ret != LZMA_OK) {
+        logger::println("LZMA decompression failed: {}",
+                        rfl::enum_to_string(ret));
+        lzma_end(&strm);
+        return;
+      }
+    }
+
+    lzma_end(&strm);
+    data = std::move(decompressed_data);
   }
 
   auto json_str = std::string(data.data(), data.size());
-  logger::println("Embedded config offset: {}, size: {}, JSON: {}",
-                  g_embedded_config.data_offset, g_embedded_config.data_size,
-                  json_str);
+  // logger::println("Embedded config offset: {}, size: {}, JSON: {}",
+  //                 g_embedded_config.data_offset, g_embedded_config.data_size,
+  //                 json_str);
 #pragma optimize("", on)
   if (auto res = rfl::json::read<EmbeddedConfigData>(json_str)) {
     gumjs_hook_manager = std::make_unique<GumJSHookManager>();
