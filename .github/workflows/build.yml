@@ -265,7 +265,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: '${{ steps.checkReleaseVersion.outputs.upload_url }}'
-        asset_path: ./fripack-inject/build/libfripack-inject.so
+        asset_path: ./fripack-inject/libfripack-inject.so
         asset_name: 'fripack-inject-${{ steps.checkReleaseVersion.outputs.version }}-${{ matrix.arch }}.so'
         asset_content_type: application/octet-stream
 
@@ -372,7 +372,7 @@ jobs:
           mkdir ./fripack-inject/frida-gumjs-devkit/
           cp ./frida/build/subprojects/frida-gum/bindings/gumjs/devkit/* ./fripack-inject/frida-gumjs-devkit/
           cd ./fripack-inject
-          xmake f -a ${{ matrix.xmake_arch }} -y -v --toolchain=clang-cl
+          xmake f -a ${{ matrix.xmake_arch }} -y -v --toolchain=clang-cl --plat=windows
           xmake -vD -y
       
       - name: Upload fripack-inject for ${{ matrix.arch }}

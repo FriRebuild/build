@@ -3,14 +3,14 @@ set_version("0.1.0")
 add_rules("plugin.compile_commands.autoupdate", {outputdir = "build"})
 
 includes("./deps/frida-gumjs-devkit.lua")
-add_requires("fmt", "frida-gumjs-devkit", "xz")
+add_requires("fmt", "frida-gumjs-devkit", "xz", "reflect-cpp")
 
 set_policy("build.optimization.lto", true)
 
 target("fripack-inject")
     set_kind("shared")
     add_files("src/**.cc")
-    add_packages("fmt", "frida-gumjs-devkit")
+    add_packages("fmt", "frida-gumjs-devkit", "xz", "reflect-cpp")
     set_strip("all")
     set_symbols("hidden")
     set_optimize("smallest")

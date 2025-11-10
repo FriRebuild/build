@@ -20,6 +20,11 @@
 #include <fmt/chrono.h>
 #include <fmt/format.h>
 
+#include "rfl.hpp"
+#include "rfl/json.hpp"
+
+#include "lzma.h"
+
 namespace logger {
 
 #ifdef __ANDROID__
@@ -52,24 +57,6 @@ void println(fmt::format_string<Args...> format, Args &&...args) {
   log("FriPackInject", message);
 }
 } // namespace logger
-
-#pragma pack(push, 1)
-struct EmbeddedConfig {
-  int32_t magic1 = 0x0d000721;
-  int32_t magic2 = 0x1f8a4e2b;
-  int32_t version = 1;
-
-  int32_t data_size = 0;
-  int32_t data_offset = 0; // Offset from the start of this struct to data.
-  bool data_xz = false; // Whether the data is compressed with xz.
-};
-
-struct EmbeddedConfigData {
-
-};
-#pragma pack(pop)
-
-static EmbeddedConfig g_embedded_config{};
 
 class GumJSHookManager {
 private:
@@ -214,12 +201,62 @@ private:
 
 static std::unique_ptr<GumJSHookManager> gumjs_hook_manager;
 
+#pragma pack(push, 1)
+struct EmbeddedConfig {
+  int32_t magic1 = 0x0d000721;
+  int32_t magic2 = 0x1f8a4e2b;
+  int32_t version = 1;
+
+  int32_t data_size = 0;
+  int32_t data_offset = 0; // Offset from the start of this struct to data.
+  bool data_xz = false;    // Whether the data is compressed with xz.
+};
+#pragma pack(pop)
+
+struct EmbeddedConfigData {
+  enum class Mode : int32_t {
+    EmbeddedJs = 1,
+  } type;
+  std::optional<std::string> js_filepath;
+  std::optional<std::string> js_content;
+};
+
+static EmbeddedConfig g_embedded_config{};
+
 void _main() {
   logger::println("[*] Library loaded, starting GumJS hook");
 
-  gumjs_hook_manager = std::make_unique<GumJSHookManager>();
+  if (g_embedded_config.magic1 != 0x0d000721 ||
+      g_embedded_config.magic2 != 0x1f8a4e2b ||
+      g_embedded_config.version != 1) {
+    logger::println("Invalid embedded config");
+    return;
+  }
 
-  gumjs_hook_manager->start_js_thread("console.log('Hello from GumJS!', Interceptor, Java);");
+  if (auto res = rfl::json::load<EmbeddedConfigData>(
+          std::string(reinterpret_cast<const char *>(&g_embedded_config) +
+                          g_embedded_config.data_offset,
+                      g_embedded_config.data_size))) {
+    gumjs_hook_manager = std::make_unique<GumJSHookManager>();
+
+    auto config = res.value();
+    std::string js_content;
+    if (config.type == EmbeddedConfigData::Mode::EmbeddedJs) {
+      if (config.js_content) {
+        js_content = *config.js_content;
+      } else {
+        logger::println("No JS content or filepath provided");
+        return;
+      }
+    } else {
+      logger::println("Unsupported embedded config mode: {}",
+                      static_cast<int32_t>(config.type));
+      return;
+    }
+  } else {
+    logger::println("Failed to parse embedded config data: {}", res.error());
+    return;
+  }
 }
 
 #ifdef _WIN32
