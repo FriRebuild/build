@@ -203,6 +203,16 @@ private:
 
 static std::unique_ptr<GumJSHookManager> gumjs_hook_manager;
 
+#ifdef _WIN32
+    #ifdef BUILD_DLL
+        #define EXPORT __declspec(dllexport)
+    #else
+        #define EXPORT __declspec(dllimport)
+    #endif
+#else
+    #define EXPORT __attribute__((visibility("default")))
+#endif
+
 #pragma pack(push, 1)
 struct EmbeddedConfig {
   int32_t magic1 = 0x0d000721;
@@ -223,7 +233,7 @@ struct EmbeddedConfigData {
   std::optional<std::string> js_content;
 };
 
-static EmbeddedConfig g_embedded_config{};
+EXPORT EmbeddedConfig g_embedded_config{};
 
 void _main() {
   logger::println("[*] Library loaded, starting GumJS hook");
