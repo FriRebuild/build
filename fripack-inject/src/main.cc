@@ -234,7 +234,7 @@ struct EmbeddedConfigData {
 };
 
 EXPORT EmbeddedConfig g_embedded_config{};
-
+#pragma optimize("", off)
 void _main() {
   logger::println("[*] Library loaded, starting GumJS hook");
 
@@ -245,7 +245,6 @@ void _main() {
     return;
   }
 
-#pragma optimize("", off)
   auto mod = get_current_module_path();
   std::ifstream file(mod, std::ios::binary);
   if (!file.is_open()) {
@@ -310,7 +309,7 @@ void _main() {
   // logger::println("Embedded config offset: {}, size: {}, JSON: {}",
   //                 g_embedded_config.data_offset, g_embedded_config.data_size,
   //                 json_str);
-#pragma optimize("", on)
+
   if (auto res = rfl::json::read<EmbeddedConfigData>(json_str)) {
     gumjs_hook_manager = std::make_unique<GumJSHookManager>();
 
@@ -335,7 +334,7 @@ void _main() {
     return;
   }
 }
-
+#pragma optimize("", on)
 #ifdef _WIN32
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
   switch (fdwReason) {
