@@ -266,7 +266,7 @@ jobs:
         asset_name: 'fripack-inject-${{ steps.checkReleaseVersion.outputs.version }}-${{ matrix.arch }}.so'
         asset_content_type: application/octet-stream
 
-  build-windows:
+  build-windows-frida:
     needs: [check_version, create_release]
     strategy:
       matrix:
@@ -359,6 +359,58 @@ jobs:
           asset_name: 'gumjs-devkit-${{ steps.checkReleaseVersion.outputs.version }}-windows-${{ matrix.arch }}.zip'
           asset_content_type: application/zip
 
+      - name: Upload frida build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frida-devkit-windows-${{ matrix.arch }}
+          path: ./frida/build/subprojects/frida-gum/bindings/gumjs/devkit/
+          retention-days: 1
+
+  build-windows-xmake:
+    needs: [check_version, create_release, build-windows-frida]
+    strategy:
+      matrix:
+        include:
+          - arch: x86
+            xmake_arch: x86
+          - arch: x86_64
+            xmake_arch: x64
+      fail-fast: false
+    runs-on: windows-2022
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download frida devkit artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: frida-devkit-windows-${{ matrix.arch }}
+          path: ./fripack-inject/frida-gumjs-devkit/
+      - name: Check release version
+        id: checkReleaseVersion
+        uses: actions/github-script@v3
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            try {
+              const releaseVersion = '${{ needs.check_version.outputs.FRIDA_VERSION }}'
+              const repoName = "${{ github.repository }}";
+              const releaseResponse = await github.repos.getReleaseByTag({
+                owner: repoName.split("/")[0],
+                repo: repoName.split("/")[1],
+                tag: releaseVersion
+              })
+              const {
+                data: { id: releaseId, html_url: htmlUrl, upload_url: uploadUrl }
+              } = releaseResponse;
+              core.setOutput('id', releaseId);
+              core.setOutput('html_url', htmlUrl);
+              core.setOutput('upload_url', uploadUrl);
+              core.setOutput('version', releaseVersion);
+            } catch (e) {
+              core.setFailed(e.message);
+            }
       - uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: 3.0.4
@@ -366,8 +418,6 @@ jobs:
 
       - name: Build xmake fripack-inject for ${{ matrix.arch }}
         run: |
-          mkdir ./fripack-inject/frida-gumjs-devkit/
-          cp ./frida/build/subprojects/frida-gum/bindings/gumjs/devkit/* ./fripack-inject/frida-gumjs-devkit/
           cd ./fripack-inject
           xmake f --plat=windows -a ${{ matrix.xmake_arch }} -y -v --toolchain=clang-cl
           xmake b -vD -y
