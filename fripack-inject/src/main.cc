@@ -3,12 +3,12 @@
 #include <cstdint>
 #include <fstream>
 #include <future>
+#include <link.h>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
-
 
 #ifdef __ANDROID__
 #include <android/log.h>
@@ -139,9 +139,11 @@ public:
     std::thread([this, js_content = std::move(js_content),
                  promise = std::move(init_promise)]() mutable {
       gum_init_embedded();
+
       backend_ = gum_script_backend_obtain_qjs();
+
       script_ =
-          gum_script_backend_create_sync(backend_, "example", js_content.data(),
+          gum_script_backend_create_sync(backend_, "script", js_content.data(),
                                          nullptr, cancellable_, &error_);
       if (error_) {
         throw std::runtime_error(
@@ -150,7 +152,6 @@ public:
 
       gum_script_set_message_handler(script_, on_message, nullptr, nullptr);
       gum_script_load_sync(script_, cancellable_);
-
       context_ = g_main_context_get_thread_default();
       while (g_main_context_pending(context_)) {
         g_main_context_iteration(context_, FALSE);
@@ -259,7 +260,7 @@ void print_hexdump(const uint8_t *data, size_t size) {
 }
 
 #pragma optimize("", off)
-void _main() {
+EXPORT extern "C" void _fi_main() {
   logger::println("[*] Library loaded, starting GumJS hook");
   if (g_embedded_config.magic1 != 0x0d000721 ||
       g_embedded_config.magic2 != 0x1f8a4e2b ||
@@ -377,5 +378,5 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
   return TRUE;
 }
 #else
-__attribute__((constructor)) static void _library_main() { _main(); }
+__attribute__((constructor)) static void _library_main() { _fi_main(); }
 #endif
