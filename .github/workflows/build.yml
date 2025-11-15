@@ -370,8 +370,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - arch: x86
-            xmake_arch: x86
+     #     - arch: x86
+     #       xmake_arch: x86
           - arch: x86_64
             xmake_arch: x64
       fail-fast: false
